@@ -42,25 +42,26 @@ function App() {
     <div className={dark ? "dark" : ""}>
       <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-sky-50 to-rose-50 text-slate-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:text-slate-100">
         <div className="flex min-h-screen">
-          <aside className="hidden w-72 border-r border-slate-200/80 bg-white/80 p-5 backdrop-blur lg:block dark:border-slate-800 dark:bg-slate-900/70">
+          <aside className="hidden w-72 border-r border-slate-200 bg-white/80 p-5 backdrop-blur-lg lg:block dark:border-slate-800 dark:bg-slate-900/70">
             <h1 className="text-2xl font-bold text-brand-500">TimeFlow</h1>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Personal Day Planner</p>
             <nav className="mt-8 space-y-2">
-              {!isLoggedIn && (
+              {!isLoggedIn ? (
                 <>
                   <Link className="block rounded-xl px-3 py-2 hover:bg-slate-200 dark:hover:bg-slate-800" to="/login">Login</Link>
                   <Link className="block rounded-xl px-3 py-2 hover:bg-slate-200 dark:hover:bg-slate-800" to="/register">Register</Link>
                 </>
+              ) : (
+                <>
+                  {links.map(([to, label]) => (
+                    <Link key={to} className="block rounded-xl px-3 py-2 hover:bg-slate-200 dark:hover:bg-slate-800" to={to}>{label}</Link>
+                  ))}
+                  <button className="mt-2 w-full rounded-xl border border-slate-300 py-2 text-sm font-medium dark:border-slate-700" onClick={onLogout}>
+                    Logout
+                  </button>
+                </>
               )}
-              {links.map(([to, label]) => (
-                <Link key={to} className={`block rounded-xl px-3 py-2 ${isLoggedIn ? "hover:bg-slate-200 dark:hover:bg-slate-800" : "pointer-events-none opacity-40"}`} to={to}>{label}</Link>
-              ))}
             </nav>
-            {isLoggedIn && (
-              <button className="mt-4 w-full rounded-xl border border-slate-300 py-2 font-medium dark:border-slate-700" onClick={onLogout}>
-                Logout
-              </button>
-            )}
             <button className="mt-6 w-full rounded-xl bg-brand-500 py-2 font-medium text-white hover:bg-brand-600" onClick={() => setDark((v) => !v)}>
               Toggle {dark ? "Light" : "Dark"} Mode
             </button>

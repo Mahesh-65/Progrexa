@@ -8,8 +8,8 @@ export default function LoginPage({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const onSubmit = async (event) => {
-    event.preventDefault();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     setLoading(true);
     setError("");
     try {
@@ -24,12 +24,12 @@ export default function LoginPage({ onLogin }) {
   };
 
   return (
-    <section className="mx-auto mt-8 max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900">
-      <h2 className="text-3xl font-bold">Welcome Back</h2>
-      <p className="mt-2 text-slate-600 dark:text-slate-400">Sign in to continue your day plan.</p>
-      <form onSubmit={onSubmit} className="mt-6 grid gap-4">
+    <section className="mx-auto mt-10 max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900">
+      <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Login</h2>
+      <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Welcome back to your personal planner.</p>
+      <form className="mt-5 grid gap-3" onSubmit={handleSubmit}>
         <input
-          className="rounded-xl border border-slate-300 bg-white p-3 text-slate-900 placeholder:text-slate-500 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          className="rounded-xl border border-slate-300 bg-white p-3 text-slate-900 placeholder-slate-500 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
           placeholder="Email"
           type="email"
           value={form.email}
@@ -38,14 +38,14 @@ export default function LoginPage({ onLogin }) {
         />
         <input
           type="password"
-          className="rounded-xl border border-slate-300 bg-white p-3 text-slate-900 placeholder:text-slate-500 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          className="rounded-xl border border-slate-300 bg-white p-3 text-slate-900 placeholder-slate-500 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
           placeholder="Password"
           value={form.password}
           onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
           required
         />
-        {error && <p className="rounded-lg bg-rose-100 px-3 py-2 text-sm text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">{error}</p>}
-        <button disabled={loading} className="rounded-xl bg-brand-500 py-3 font-medium text-white hover:bg-brand-600 disabled:opacity-60">
+        {error && <p className="rounded-lg bg-rose-100 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">{error}</p>}
+        <button className="rounded-xl bg-brand-500 py-3 font-medium text-white hover:bg-brand-600 disabled:opacity-60" disabled={loading}>
           {loading ? "Signing In..." : "Sign In"}
         </button>
       </form>
