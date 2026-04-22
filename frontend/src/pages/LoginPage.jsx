@@ -1,12 +1,54 @@
-export default function LoginPage() {
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { apiPost } from "../api";
+
+export default function LoginPage({ onLogin }) {
+  const navigate = useNavigate();
+  const [form, setForm] = useState({ email: "", password: "" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const onSubmit = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const user = await apiPost("auth", "/login", form);
+      onLogin(user);
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err.message || "Unable to login");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <section className="mx-auto max-w-xl card">
-      <h2 className="text-2xl font-semibold">Login</h2>
-      <div className="mt-4 grid gap-3">
-        <input className="rounded-xl border border-slate-700 bg-slate-950 p-3" placeholder="Email" />
-        <input type="password" className="rounded-xl border border-slate-700 bg-slate-950 p-3" placeholder="Password" />
-        <button className="rounded-xl bg-brand-500 py-3 font-medium text-white">Sign In</button>
-      </div>
+    <section className="mx-auto mt-8 max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900">
+      <h2 className="text-3xl font-bold">Welcome Back</h2>
+      <p className="mt-2 text-slate-600 dark:text-slate-400">Sign in to continue your day plan.</p>
+      <form onSubmit={onSubmit} className="mt-6 grid gap-4">
+        <input
+          className="rounded-xl border border-slate-300 bg-white p-3 text-slate-900 placeholder:text-slate-500 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          placeholder="Email"
+          type="email"
+          value={form.email}
+          onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+          required
+        />
+        <input
+          type="password"
+          className="rounded-xl border border-slate-300 bg-white p-3 text-slate-900 placeholder:text-slate-500 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          placeholder="Password"
+          value={form.password}
+          onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+          required
+        />
+        {error && <p className="rounded-lg bg-rose-100 px-3 py-2 text-sm text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">{error}</p>}
+        <button disabled={loading} className="rounded-xl bg-brand-500 py-3 font-medium text-white hover:bg-brand-600 disabled:opacity-60">
+          {loading ? "Signing In..." : "Sign In"}
+        </button>
+      </form>
     </section>
   );
 }
