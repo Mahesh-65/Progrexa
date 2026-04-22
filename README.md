@@ -48,7 +48,7 @@ docker compose up --build
 
 ## Service URLs
 
-- Frontend: [http://localhost:5173](http://localhost:5173)
+- Frontend: [http://localhost](http://localhost)
 - Auth Service: [http://localhost:8001/docs](http://localhost:8001/docs)
 - User Service: [http://localhost:8002/docs](http://localhost:8002/docs)
 - Task Service: [http://localhost:8003/docs](http://localhost:8003/docs)

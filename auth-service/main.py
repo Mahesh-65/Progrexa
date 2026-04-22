@@ -4,9 +4,17 @@ from typing import Optional
 
 import psycopg2
 from fastapi import FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
 
 app = FastAPI(title="TimeFlow Auth Service", version="1.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def get_conn():
@@ -46,8 +54,11 @@ def health():
 
 @app.post("/register", status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterInput):
-    conn = get_conn()
-    cur = conn.cursor()
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+    except Exception:
+        raise HTTPException(status_code=500, detail="Database connection failed")
     try:
         cur.execute("SELECT id FROM users WHERE email = %s", (payload.email,))
         if cur.fetchone():
@@ -71,8 +82,11 @@ def register(payload: RegisterInput):
 
 @app.post("/login")
 def login(payload: LoginInput):
-    conn = get_conn()
-    cur = conn.cursor()
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+    except Exception:
+        raise HTTPException(status_code=500, detail="Database connection failed")
     try:
         cur.execute(
             "SELECT id, email, full_name, password_hash FROM users WHERE email = %s",
