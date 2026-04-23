@@ -68,6 +68,31 @@ function App() {
           </aside>
 
           <main className="flex-1 p-4 lg:p-6">
+            <header className="mb-4 rounded-2xl border border-slate-200 bg-white/80 p-3 backdrop-blur lg:hidden dark:border-slate-800 dark:bg-slate-900/70">
+              <p className="text-sm font-semibold text-brand-500">TimeFlow</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {!isLoggedIn ? (
+                  <>
+                    <Link className="rounded-lg border border-slate-300 px-3 py-1 text-sm dark:border-slate-700" to="/login">Login</Link>
+                    <Link className="rounded-lg border border-slate-300 px-3 py-1 text-sm dark:border-slate-700" to="/register">Register</Link>
+                  </>
+                ) : (
+                  <>
+                    {links.map(([to, label]) => (
+                      <Link key={to} className="rounded-lg border border-slate-300 px-3 py-1 text-sm dark:border-slate-700" to={to}>
+                        {label}
+                      </Link>
+                    ))}
+                    <button className="rounded-lg border border-slate-300 px-3 py-1 text-sm dark:border-slate-700" onClick={onLogout}>
+                      Logout
+                    </button>
+                  </>
+                )}
+                <button className="rounded-lg bg-brand-500 px-3 py-1 text-sm text-white" onClick={() => setDark((v) => !v)}>
+                  {dark ? "Light" : "Dark"}
+                </button>
+              </div>
+            </header>
             <Routes>
               <Route path="/" element={<Navigate to={isLoggedIn ? "/dashboard" : "/login"} replace />} />
               <Route path="/login" element={<LoginPage onLogin={onLogin} />} />
