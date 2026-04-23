@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from typing import Optional
+from typing import Literal
 
 from bson import ObjectId
 from dotenv import load_dotenv
@@ -37,7 +37,7 @@ class RegisterIn(BaseModel):
     full_name: str
     username: str
     email: EmailStr
-    gender: str
+    gender: Literal["Male", "Female", "Other"]
     age: int = Field(..., ge=10, le=120)
     password: str = Field(..., min_length=6)
     confirm_password: str = Field(..., min_length=6)

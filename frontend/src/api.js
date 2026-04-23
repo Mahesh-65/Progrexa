@@ -2,13 +2,13 @@ const USER_ID = "demo-user";
 
 export const api = {
   userId: USER_ID,
-  auth: "http://localhost:8001",
-  user: "http://localhost:8002",
-  task: "http://localhost:8003",
-  schedule: "http://localhost:8004",
-  timer: "http://localhost:8005",
-  analytics: "http://localhost:8006",
-  notifications: "http://localhost:8007",
+  auth: "/api/auth",
+  user: "/api/user",
+  task: "/api/task",
+  schedule: "/api/schedule",
+  timer: "/api/timer",
+  analytics: "/api/analytics",
+  notifications: "/api/notifications",
 };
 
 export async function request(url, options = {}) {
