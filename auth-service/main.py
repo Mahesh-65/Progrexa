@@ -1,13 +1,29 @@
-import hashlib
 import os
+from datetime import datetime
 from typing import Optional
 
-import psycopg2
-from fastapi import FastAPI, HTTPException, status
+from bson import ObjectId
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
+from pymongo import MongoClient
 
-app = FastAPI(title="TimeFlow Auth Service", version="1.0.0")
+load_dotenv()
+
+MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+MONGODB_DB = os.getenv("MONGODB_DB", "prorexa")
+PORT = int(os.getenv("SERVICE_PORT", "8000"))
+
+client = MongoClient(MONGODB_URL)
+db = client[MONGODB_DB]
+
+
+def serialize(doc):
+    doc["id"] = str(doc.pop("_id"))
+    return doc
+
+app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,107 +31,44 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+users = db["users"]
 
-
-def get_conn():
-    return psycopg2.connect(
-        host=os.getenv("DB_HOST", "localhost"),
-        port=os.getenv("DB_PORT", "5432"),
-        dbname=os.getenv("DB_NAME", "progrexa_db"),
-        user=os.getenv("DB_USER", "progrexa_user"),
-        password=os.getenv("DB_PASSWORD", "progrexa_pass"),
-    )
-
-
-def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
-
-
-class RegisterInput(BaseModel):
+class RegisterIn(BaseModel):
+    full_name: str
+    username: str
     email: EmailStr
-    password: str = Field(min_length=6)
-    full_name: str = Field(min_length=2, max_length=120)
+    gender: str
+    age: int = Field(..., ge=10, le=120)
+    password: str = Field(..., min_length=6)
+    confirm_password: str = Field(..., min_length=6)
 
-
-class LoginInput(BaseModel):
-    email: EmailStr
+class LoginIn(BaseModel):
+    identity: str
     password: str
 
-
-class PasswordCheckInput(BaseModel):
-    user_id: int
-    password: str
-
-
-@app.get("/health")
+@app.get("/")
 def health():
-    return {"status": "ok", "service": "auth-service"}
+    return {"service": "auth-service", "status": "ok"}
 
+@app.post("/auth/register")
+def register(payload: RegisterIn):
+    if payload.password != payload.confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
+    if users.find_one({"$or": [{"username": payload.username}, {"email": payload.email}] }):
+        raise HTTPException(status_code=400, detail="Username or email already exists")
+    data = payload.model_dump()
+    data.pop("confirm_password")
+    data["created_at"] = datetime.utcnow()
+    result = users.insert_one(data)
+    created = users.find_one({"_id": result.inserted_id})
+    return {"message": "Registration successful", "data": serialize(created)}
 
-@app.post("/register", status_code=status.HTTP_201_CREATED)
-def register(payload: RegisterInput):
-    try:
-        conn = get_conn()
-        cur = conn.cursor()
-    except Exception:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    try:
-        cur.execute("SELECT id FROM users WHERE email = %s", (payload.email,))
-        if cur.fetchone():
-            raise HTTPException(status_code=400, detail="Email already registered")
-
-        cur.execute(
-            """
-            INSERT INTO users (email, password_hash, full_name)
-            VALUES (%s, %s, %s)
-            RETURNING id, email, full_name
-            """,
-            (payload.email, hash_password(payload.password), payload.full_name),
-        )
-        user = cur.fetchone()
-        conn.commit()
-        return {"id": user[0], "email": user[1], "full_name": user[2]}
-    finally:
-        cur.close()
-        conn.close()
-
-
-@app.post("/login")
-def login(payload: LoginInput):
-    try:
-        conn = get_conn()
-        cur = conn.cursor()
-    except Exception:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    try:
-        cur.execute(
-            "SELECT id, email, full_name, password_hash FROM users WHERE email = %s",
-            (payload.email,),
-        )
-        user = cur.fetchone()
-        if not user or user[3] != hash_password(payload.password):
-            raise HTTPException(status_code=401, detail="Invalid email or password")
-        return {"id": user[0], "email": user[1], "full_name": user[2], "message": "Login successful"}
-    finally:
-        cur.close()
-        conn.close()
-
-
-@app.post("/logout")
-def logout(user_id: Optional[int] = None):
-    return {"message": "Logout successful", "user_id": user_id}
-
-
-@app.post("/password-check")
-def password_check(payload: PasswordCheckInput):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute("SELECT password_hash FROM users WHERE id = %s", (payload.user_id,))
-        record = cur.fetchone()
-        if not record:
-            raise HTTPException(status_code=404, detail="User not found")
-        return {"is_valid": record[0] == hash_password(payload.password)}
-    finally:
-        cur.close()
-        conn.close()
+@app.post("/auth/login")
+def login(payload: LoginIn):
+    user = users.find_one({
+        "$or": [{"username": payload.identity}, {"email": payload.identity}],
+        "password": payload.password,
+    })
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    return {"message": "Login successful", "data": serialize(user)}

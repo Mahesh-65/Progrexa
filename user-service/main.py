@@ -1,115 +1,67 @@
 import os
+from datetime import datetime
+from typing import Optional
 
-import psycopg2
-from fastapi import FastAPI, HTTPException, status
-from pydantic import BaseModel
+from bson import ObjectId
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, EmailStr, Field
+from pymongo import MongoClient
 
-app = FastAPI(title="TimeFlow User Service", version="1.0.0")
+load_dotenv()
+
+MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+MONGODB_DB = os.getenv("MONGODB_DB", "prorexa")
+PORT = int(os.getenv("SERVICE_PORT", "8000"))
+
+client = MongoClient(MONGODB_URL)
+db = client[MONGODB_DB]
 
 
-def get_conn():
-    return psycopg2.connect(
-        host=os.getenv("DB_HOST", "localhost"),
-        port=os.getenv("DB_PORT", "5432"),
-        dbname=os.getenv("DB_NAME", "progrexa_db"),
-        user=os.getenv("DB_USER", "progrexa_user"),
-        password=os.getenv("DB_PASSWORD", "progrexa_pass"),
-    )
+def serialize(doc):
+    doc["id"] = str(doc.pop("_id"))
+    return doc
 
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+profiles = db["user_profiles"]
 
-class UserProfileInput(BaseModel):
-    user_id: int
-    bio: str | None = None
-    avatar_url: str | None = None
+class ProfileIn(BaseModel):
+    user_id: str
+    bio: str = ""
     timezone: str = "UTC"
+    theme: str = "dark"
+    daily_goal_minutes: int = 120
 
-
-class UserPreferenceInput(BaseModel):
-    user_id: int
-    theme: str = "light"
-    language: str = "en"
-    notifications_enabled: bool = True
-
-
-@app.get("/health")
+@app.get("/")
 def health():
-    return {"status": "ok", "service": "user-service"}
+    return {"service": "user-service", "status": "ok"}
 
-
-@app.post("/profiles", status_code=status.HTTP_201_CREATED)
-def upsert_profile(payload: UserProfileInput):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            """
-            INSERT INTO user_profiles (user_id, bio, avatar_url, timezone)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (user_id) DO UPDATE
-            SET bio = EXCLUDED.bio, avatar_url = EXCLUDED.avatar_url, timezone = EXCLUDED.timezone
-            RETURNING id, user_id, bio, avatar_url, timezone
-            """,
-            (payload.user_id, payload.bio, payload.avatar_url, payload.timezone),
-        )
-        row = cur.fetchone()
-        conn.commit()
-        return {"id": row[0], "user_id": row[1], "bio": row[2], "avatar_url": row[3], "timezone": row[4]}
-    finally:
-        cur.close()
-        conn.close()
-
+@app.post("/profiles")
+def create_profile(payload: ProfileIn):
+    doc = payload.model_dump()
+    doc["updated_at"] = datetime.utcnow()
+    result = profiles.insert_one(doc)
+    return {"data": serialize(profiles.find_one({"_id": result.inserted_id}))}
 
 @app.get("/profiles/{user_id}")
-def get_profile(user_id: int):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute("SELECT id, user_id, bio, avatar_url, timezone FROM user_profiles WHERE user_id = %s", (user_id,))
-        row = cur.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Profile not found")
-        return {"id": row[0], "user_id": row[1], "bio": row[2], "avatar_url": row[3], "timezone": row[4]}
-    finally:
-        cur.close()
-        conn.close()
+def get_profile(user_id: str):
+    profile = profiles.find_one({"user_id": user_id})
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return {"data": serialize(profile)}
 
-
-@app.post("/preferences", status_code=status.HTTP_201_CREATED)
-def upsert_preferences(payload: UserPreferenceInput):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            """
-            INSERT INTO user_preferences (user_id, theme, language, notifications_enabled)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (user_id) DO UPDATE
-            SET theme = EXCLUDED.theme, language = EXCLUDED.language, notifications_enabled = EXCLUDED.notifications_enabled
-            RETURNING id, user_id, theme, language, notifications_enabled
-            """,
-            (payload.user_id, payload.theme, payload.language, payload.notifications_enabled),
-        )
-        row = cur.fetchone()
-        conn.commit()
-        return {"id": row[0], "user_id": row[1], "theme": row[2], "language": row[3], "notifications_enabled": row[4]}
-    finally:
-        cur.close()
-        conn.close()
-
-
-@app.get("/preferences/{user_id}")
-def get_preferences(user_id: int):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            "SELECT id, user_id, theme, language, notifications_enabled FROM user_preferences WHERE user_id = %s",
-            (user_id,),
-        )
-        row = cur.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Preferences not found")
-        return {"id": row[0], "user_id": row[1], "theme": row[2], "language": row[3], "notifications_enabled": row[4]}
-    finally:
-        cur.close()
-        conn.close()
+@app.put("/profiles/{profile_id}")
+def update_profile(profile_id: str, payload: ProfileIn):
+    profiles.update_one({"_id": ObjectId(profile_id)}, {"$set": {**payload.model_dump(), "updated_at": datetime.utcnow()}})
+    profile = profiles.find_one({"_id": ObjectId(profile_id)})
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return {"data": serialize(profile)}

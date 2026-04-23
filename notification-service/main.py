@@ -1,102 +1,71 @@
 import os
+from datetime import datetime
+from typing import Optional
 
-import psycopg2
-from fastapi import FastAPI, HTTPException, status
-from pydantic import BaseModel
+from bson import ObjectId
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, EmailStr, Field
+from pymongo import MongoClient
 
-app = FastAPI(title="TimeFlow Notification Service", version="1.0.0")
+load_dotenv()
+
+MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+MONGODB_DB = os.getenv("MONGODB_DB", "prorexa")
+PORT = int(os.getenv("SERVICE_PORT", "8000"))
+
+client = MongoClient(MONGODB_URL)
+db = client[MONGODB_DB]
 
 
-def get_conn():
-    return psycopg2.connect(
-        host=os.getenv("DB_HOST", "localhost"),
-        port=os.getenv("DB_PORT", "5432"),
-        dbname=os.getenv("DB_NAME", "progrexa_db"),
-        user=os.getenv("DB_USER", "progrexa_user"),
-        password=os.getenv("DB_PASSWORD", "progrexa_pass"),
-    )
+def serialize(doc):
+    doc["id"] = str(doc.pop("_id"))
+    return doc
 
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+notifications = db["notifications"]
 
-class NotificationInput(BaseModel):
-    user_id: int
+class NotificationIn(BaseModel):
+    user_id: str
     title: str
     message: str
+    type: str = "reminder"
+    is_read: bool = False
 
-
-class ReminderInput(BaseModel):
-    reminder_time: str
-
-
-@app.get("/health")
+@app.get("/")
 def health():
-    return {"status": "ok", "service": "notification-service"}
+    return {"service": "notification-service", "status": "ok"}
 
-
-@app.post("/notifications", status_code=status.HTTP_201_CREATED)
-def create_notification(payload: NotificationInput):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            """
-            INSERT INTO notifications (user_id, title, message)
-            VALUES (%s, %s, %s)
-            RETURNING id, user_id, title, message, is_read, created_at
-            """,
-            (payload.user_id, payload.title, payload.message),
-        )
-        row = cur.fetchone()
-        conn.commit()
-        return {"id": row[0], "user_id": row[1], "title": row[2], "message": row[3], "is_read": row[4], "created_at": row[5]}
-    finally:
-        cur.close()
-        conn.close()
-
+@app.post("/notifications")
+def create_notification(payload: NotificationIn):
+    doc = payload.model_dump()
+    doc["created_at"] = datetime.utcnow()
+    result = notifications.insert_one(doc)
+    return {"data": serialize(notifications.find_one({"_id": result.inserted_id}))}
 
 @app.get("/notifications/{user_id}")
-def list_notifications(user_id: int):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            "SELECT id, title, message, is_read, created_at FROM notifications WHERE user_id = %s ORDER BY created_at DESC",
-            (user_id,),
-        )
-        rows = cur.fetchall()
-        return [{"id": r[0], "title": r[1], "message": r[2], "is_read": r[3], "created_at": r[4]} for r in rows]
-    finally:
-        cur.close()
-        conn.close()
+def list_notifications(user_id: str):
+    return {"data": [serialize(x) for x in notifications.find({"user_id": user_id}).sort("created_at", -1)]}
 
+@app.put("/notifications/{notification_id}")
+def update_notification(notification_id: str, payload: NotificationIn):
+    notifications.update_one({"_id": ObjectId(notification_id)}, {"$set": payload.model_dump()})
+    item = notifications.find_one({"_id": ObjectId(notification_id)})
+    if not item:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return {"data": serialize(item)}
 
-@app.patch("/notifications/{notification_id}/read")
-def mark_read(notification_id: int):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute("UPDATE notifications SET is_read = TRUE WHERE id = %s RETURNING id", (notification_id,))
-        row = cur.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Notification not found")
-        conn.commit()
-        return {"message": "Notification marked as read", "notification_id": row[0]}
-    finally:
-        cur.close()
-        conn.close()
-
-
-@app.post("/notifications/{notification_id}/reminders", status_code=status.HTTP_201_CREATED)
-def create_reminder(notification_id: int, payload: ReminderInput):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            "INSERT INTO reminder_logs (notification_id, reminder_time) VALUES (%s, %s) RETURNING id, notification_id, reminder_time, sent_at",
-            (notification_id, payload.reminder_time),
-        )
-        row = cur.fetchone()
-        conn.commit()
-        return {"id": row[0], "notification_id": row[1], "reminder_time": row[2], "sent_at": row[3]}
-    finally:
-        cur.close()
-        conn.close()
+@app.delete("/notifications/{notification_id}")
+def delete_notification(notification_id: str):
+    deleted = notifications.find_one_and_delete({"_id": ObjectId(notification_id)})
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return {"message": "Notification deleted"}

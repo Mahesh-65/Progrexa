@@ -1,20 +1,18 @@
-const stats = [
-  ["Tasks Done", "12"],
-  ["Focus Time", "4h 30m"],
-  ["Events Today", "5"],
-  ["Unread Alerts", "3"],
-];
-
 export default function DashboardPage() {
+  const cards = [
+    ["Today's Tasks", "6 planned, 3 completed"],
+    ["Upcoming Schedule", "Team sync at 3:00 PM"],
+    ["Active Timer", "Focus session: 12m left"],
+    ["Productivity Summary", "Score: 82 / 100"],
+  ];
   return (
-    <section>
-      <h2 className="text-3xl font-bold">Dashboard</h2>
-      <p className="mt-1 text-slate-400">Your productivity command center.</p>
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {stats.map(([label, value]) => (
-          <article key={label} className="card">
-            <p className="text-sm text-slate-400">{label}</p>
-            <p className="mt-2 text-3xl font-bold">{value}</p>
+    <section className="space-y-4">
+      <h2 className="page-title">Dashboard</h2>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {cards.map(([title, val]) => (
+          <article key={title} className="card">
+            <h3 className="text-sm text-slate-400">{title}</h3>
+            <p className="mt-2 text-lg font-semibold text-white">{val}</p>
           </article>
         ))}
       </div>

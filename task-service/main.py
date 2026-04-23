@@ -1,162 +1,73 @@
 import os
+from datetime import datetime
+from typing import Optional
 
-import psycopg2
-from fastapi import FastAPI, HTTPException, status
-from pydantic import BaseModel
+from bson import ObjectId
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, EmailStr, Field
+from pymongo import MongoClient
 
-app = FastAPI(title="TimeFlow Task Service", version="1.0.0")
+load_dotenv()
+
+MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+MONGODB_DB = os.getenv("MONGODB_DB", "prorexa")
+PORT = int(os.getenv("SERVICE_PORT", "8000"))
+
+client = MongoClient(MONGODB_URL)
+db = client[MONGODB_DB]
 
 
-def get_conn():
-    return psycopg2.connect(
-        host=os.getenv("DB_HOST", "localhost"),
-        port=os.getenv("DB_PORT", "5432"),
-        dbname=os.getenv("DB_NAME", "progrexa_db"),
-        user=os.getenv("DB_USER", "progrexa_user"),
-        password=os.getenv("DB_PASSWORD", "progrexa_pass"),
-    )
+def serialize(doc):
+    doc["id"] = str(doc.pop("_id"))
+    return doc
 
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+tasks = db["tasks"]
 
-class TaskInput(BaseModel):
-    user_id: int
+class TaskIn(BaseModel):
+    user_id: str
     title: str
-    description: str | None = None
+    description: str = ""
+    status: str = "todo"
     priority: str = "medium"
-    due_date: str | None = None
+    tags: list[str] = []
+    due_date: Optional[str] = None
 
-
-class SubtaskInput(BaseModel):
-    title: str
-
-
-class LabelInput(BaseModel):
-    label: str
-
-
-@app.get("/health")
+@app.get("/")
 def health():
-    return {"status": "ok", "service": "task-service"}
+    return {"service": "task-service", "status": "ok"}
 
-
-@app.post("/tasks", status_code=status.HTTP_201_CREATED)
-def create_task(payload: TaskInput):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            """
-            INSERT INTO tasks (user_id, title, description, priority, due_date)
-            VALUES (%s, %s, %s, %s, %s)
-            RETURNING id, user_id, title, description, priority, due_date, is_completed
-            """,
-            (payload.user_id, payload.title, payload.description, payload.priority, payload.due_date),
-        )
-        row = cur.fetchone()
-        conn.commit()
-        return {"id": row[0], "user_id": row[1], "title": row[2], "description": row[3], "priority": row[4], "due_date": row[5], "is_completed": row[6]}
-    finally:
-        cur.close()
-        conn.close()
-
+@app.post("/tasks")
+def create_task(payload: TaskIn):
+    doc = payload.model_dump()
+    doc["created_at"] = datetime.utcnow()
+    result = tasks.insert_one(doc)
+    return {"data": serialize(tasks.find_one({"_id": result.inserted_id}))}
 
 @app.get("/tasks/{user_id}")
-def list_tasks(user_id: int):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            "SELECT id, title, priority, due_date, is_completed FROM tasks WHERE user_id = %s ORDER BY created_at DESC",
-            (user_id,),
-        )
-        rows = cur.fetchall()
-        return [{"id": r[0], "title": r[1], "priority": r[2], "due_date": r[3], "is_completed": r[4]} for r in rows]
-    finally:
-        cur.close()
-        conn.close()
-
+def list_tasks(user_id: str):
+    return {"data": [serialize(x) for x in tasks.find({"user_id": user_id}).sort("created_at", -1)]}
 
 @app.put("/tasks/{task_id}")
-def update_task(task_id: int, payload: TaskInput):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            """
-            UPDATE tasks
-            SET title = %s, description = %s, priority = %s, due_date = %s
-            WHERE id = %s
-            RETURNING id, title, description, priority, due_date, is_completed
-            """,
-            (payload.title, payload.description, payload.priority, payload.due_date, task_id),
-        )
-        row = cur.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Task not found")
-        conn.commit()
-        return {"id": row[0], "title": row[1], "description": row[2], "priority": row[3], "due_date": row[4], "is_completed": row[5]}
-    finally:
-        cur.close()
-        conn.close()
-
-
-@app.patch("/tasks/{task_id}/complete")
-def complete_task(task_id: int):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute("UPDATE tasks SET is_completed = TRUE, status = 'done' WHERE id = %s RETURNING id", (task_id,))
-        row = cur.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Task not found")
-        conn.commit()
-        return {"message": "Task marked complete", "task_id": row[0]}
-    finally:
-        cur.close()
-        conn.close()
-
+def update_task(task_id: str, payload: TaskIn):
+    tasks.update_one({"_id": ObjectId(task_id)}, {"$set": payload.model_dump()})
+    updated = tasks.find_one({"_id": ObjectId(task_id)})
+    if not updated:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"data": serialize(updated)}
 
 @app.delete("/tasks/{task_id}")
-def delete_task(task_id: int):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute("DELETE FROM tasks WHERE id = %s RETURNING id", (task_id,))
-        row = cur.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Task not found")
-        conn.commit()
-        return {"message": "Task deleted", "task_id": row[0]}
-    finally:
-        cur.close()
-        conn.close()
-
-
-@app.post("/tasks/{task_id}/subtasks", status_code=status.HTTP_201_CREATED)
-def add_subtask(task_id: int, payload: SubtaskInput):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            "INSERT INTO task_subtasks (task_id, title) VALUES (%s, %s) RETURNING id, task_id, title, is_completed",
-            (task_id, payload.title),
-        )
-        row = cur.fetchone()
-        conn.commit()
-        return {"id": row[0], "task_id": row[1], "title": row[2], "is_completed": row[3]}
-    finally:
-        cur.close()
-        conn.close()
-
-
-@app.post("/tasks/{task_id}/labels", status_code=status.HTTP_201_CREATED)
-def add_label(task_id: int, payload: LabelInput):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute("INSERT INTO task_labels (task_id, label) VALUES (%s, %s) RETURNING id, task_id, label", (task_id, payload.label))
-        row = cur.fetchone()
-        conn.commit()
-        return {"id": row[0], "task_id": row[1], "label": row[2]}
-    finally:
-        cur.close()
-        conn.close()
+def delete_task(task_id: str):
+    deleted = tasks.find_one_and_delete({"_id": ObjectId(task_id)})
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"message": "Task deleted"}

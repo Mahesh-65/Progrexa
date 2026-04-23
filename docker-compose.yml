@@ -1,103 +1,98 @@
 version: "3.9"
 
 services:
-  postgres:
-    build: ./database
-    container_name: progrexa-postgres
-    env_file:
-      - ./database/.env
+  mongodb:
+    image: mongo:7
+    container_name: prorexa-mongodb
+    restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "27017:27017"
     volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
+      - mongo_data:/data/db
 
   auth-service:
     build: ./auth-service
+    container_name: prorexa-auth-service
     env_file:
       - ./auth-service/.env
     ports:
       - "8001:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
+      - mongodb
 
   user-service:
     build: ./user-service
+    container_name: prorexa-user-service
     env_file:
       - ./user-service/.env
     ports:
       - "8002:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
+      - mongodb
 
   task-service:
     build: ./task-service
+    container_name: prorexa-task-service
     env_file:
       - ./task-service/.env
     ports:
       - "8003:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
+      - mongodb
 
   schedule-service:
     build: ./schedule-service
+    container_name: prorexa-schedule-service
     env_file:
       - ./schedule-service/.env
     ports:
       - "8004:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
+      - mongodb
 
   time-tracker-service:
     build: ./time-tracker-service
+    container_name: prorexa-time-tracker-service
     env_file:
       - ./time-tracker-service/.env
     ports:
       - "8005:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
+      - mongodb
 
   analytics-service:
     build: ./analytics-service
+    container_name: prorexa-analytics-service
     env_file:
       - ./analytics-service/.env
     ports:
       - "8006:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
+      - mongodb
 
   notification-service:
     build: ./notification-service
+    container_name: prorexa-notification-service
     env_file:
       - ./notification-service/.env
     ports:
       - "8007:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
+      - mongodb
 
   frontend:
     build: ./frontend
+    container_name: prorexa-frontend
     ports:
-      - "80:5173"
+      - "5173:5173"
     depends_on:
       - auth-service
+      - user-service
       - task-service
       - schedule-service
       - time-tracker-service
       - analytics-service
       - notification-service
-      - user-service
 
 volumes:
-  pgdata:
+  mongo_data:

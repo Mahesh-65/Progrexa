@@ -1,13 +1,15 @@
-export default function ProfilePage({ user }) {
+export default function ProfilePage() {
   return (
-    <section>
-      <h2 className="text-3xl font-bold">Profile</h2>
-      <div className="mt-6 card grid max-w-2xl gap-3">
-        <input className="rounded-xl border border-slate-300 bg-white p-3 text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100" defaultValue={user?.full_name || "Your Name"} />
-        <input className="rounded-xl border border-slate-300 bg-white p-3 text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100" defaultValue={user?.email || "your@email.com"} />
-        <input className="rounded-xl border border-slate-300 bg-white p-3 text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100" defaultValue="Asia/Kolkata" />
-        <select className="rounded-xl border border-slate-300 bg-white p-3 text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"><option>Dark</option><option>Light</option></select>
-        <button className="rounded-xl bg-brand-500 py-3 text-white">Save Profile</button>
+    <section className="space-y-4">
+      <h2 className="page-title">Profile Settings</h2>
+      <div className="card grid gap-3 sm:grid-cols-2">
+        <input className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" defaultValue="Demo User" />
+        <input className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" defaultValue="demo@example.com" />
+        <select className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2">
+          <option>Dark Theme</option>
+          <option>Light Theme</option>
+        </select>
+        <button className="rounded-lg bg-indigo-600 px-4 py-2">Save Preferences</button>
       </div>
     </section>
   );

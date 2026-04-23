@@ -1,10 +1,14 @@
 export default function NotificationsPage() {
+  const messages = ["Daily summary is ready", "Task reminder: Finish API docs", "Focus streak: 5 days"];
   return (
-    <section>
-      <h2 className="text-3xl font-bold">Notifications</h2>
-      <div className="mt-6 space-y-3">
-        <article className="card"><p className="font-semibold">Task Reminder</p><p className="text-slate-400">Finish your dashboard redesign by 6 PM.</p></article>
-        <article className="card"><p className="font-semibold">Daily Summary</p><p className="text-slate-400">You completed 7 of 9 planned tasks.</p></article>
+    <section className="space-y-4">
+      <h2 className="page-title">Notifications</h2>
+      <div className="space-y-2">
+        {messages.map((m) => (
+          <article key={m} className="card">
+            <p>{m}</p>
+          </article>
+        ))}
       </div>
     </section>
   );

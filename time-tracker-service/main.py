@@ -1,111 +1,70 @@
 import os
+from datetime import datetime
+from typing import Optional
 
-import psycopg2
-from fastapi import FastAPI, HTTPException, status
-from pydantic import BaseModel
+from bson import ObjectId
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, EmailStr, Field
+from pymongo import MongoClient
 
-app = FastAPI(title="TimeFlow Time Tracker Service", version="1.0.0")
+load_dotenv()
 
+MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+MONGODB_DB = os.getenv("MONGODB_DB", "prorexa")
+PORT = int(os.getenv("SERVICE_PORT", "8000"))
 
-def get_conn():
-    return psycopg2.connect(
-        host=os.getenv("DB_HOST", "localhost"),
-        port=os.getenv("DB_PORT", "5432"),
-        dbname=os.getenv("DB_NAME", "progrexa_db"),
-        user=os.getenv("DB_USER", "progrexa_user"),
-        password=os.getenv("DB_PASSWORD", "progrexa_pass"),
-    )
-
-
-class FocusSessionInput(BaseModel):
-    user_id: int
-    mode: str = "pomodoro"
-    planned_minutes: int
+client = MongoClient(MONGODB_URL)
+db = client[MONGODB_DB]
 
 
-class TrackedSessionInput(BaseModel):
-    user_id: int
-    task_id: int | None = None
-    start_time: str
-    end_time: str | None = None
-    duration_minutes: int = 0
-    notes: str | None = None
+def serialize(doc):
+    doc["id"] = str(doc.pop("_id"))
+    return doc
 
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+sessions = db["sessions"]
 
-@app.get("/health")
+class SessionIn(BaseModel):
+    user_id: str
+    mode: str = "focus"
+    duration_minutes: int = 25
+    status: str = "active"
+
+@app.get("/")
 def health():
-    return {"status": "ok", "service": "time-tracker-service"}
+    return {"service": "time-tracker-service", "status": "ok"}
 
+@app.post("/sessions")
+def create_session(payload: SessionIn):
+    doc = payload.model_dump()
+    doc["started_at"] = datetime.utcnow()
+    result = sessions.insert_one(doc)
+    return {"data": serialize(sessions.find_one({"_id": result.inserted_id}))}
 
-@app.post("/focus/start", status_code=status.HTTP_201_CREATED)
-def start_focus(payload: FocusSessionInput):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            """
-            INSERT INTO focus_sessions (user_id, mode, planned_minutes)
-            VALUES (%s, %s, %s)
-            RETURNING id, user_id, mode, planned_minutes, started_at
-            """,
-            (payload.user_id, payload.mode, payload.planned_minutes),
-        )
-        row = cur.fetchone()
-        conn.commit()
-        return {"id": row[0], "user_id": row[1], "mode": row[2], "planned_minutes": row[3], "started_at": row[4]}
-    finally:
-        cur.close()
-        conn.close()
+@app.get("/sessions/{user_id}")
+def list_sessions(user_id: str):
+    return {"data": [serialize(x) for x in sessions.find({"user_id": user_id}).sort("started_at", -1)]}
 
+@app.put("/sessions/{session_id}")
+def update_session(session_id: str, payload: SessionIn):
+    sessions.update_one({"_id": ObjectId(session_id)}, {"$set": payload.model_dump()})
+    item = sessions.find_one({"_id": ObjectId(session_id)})
+    if not item:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"data": serialize(item)}
 
-@app.patch("/focus/{session_id}/stop")
-def stop_focus(session_id: int):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute("UPDATE focus_sessions SET ended_at = NOW() WHERE id = %s RETURNING id, ended_at", (session_id,))
-        row = cur.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Focus session not found")
-        conn.commit()
-        return {"id": row[0], "ended_at": row[1]}
-    finally:
-        cur.close()
-        conn.close()
-
-
-@app.post("/tracked", status_code=status.HTTP_201_CREATED)
-def create_tracked(payload: TrackedSessionInput):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            """
-            INSERT INTO tracked_sessions (user_id, task_id, start_time, end_time, duration_minutes, notes)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            RETURNING id, user_id, task_id, start_time, end_time, duration_minutes, notes
-            """,
-            (payload.user_id, payload.task_id, payload.start_time, payload.end_time, payload.duration_minutes, payload.notes),
-        )
-        row = cur.fetchone()
-        conn.commit()
-        return {"id": row[0], "user_id": row[1], "task_id": row[2], "start_time": row[3], "end_time": row[4], "duration_minutes": row[5], "notes": row[6]}
-    finally:
-        cur.close()
-        conn.close()
-
-
-@app.get("/tracked/{user_id}")
-def list_tracked(user_id: int):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            "SELECT id, task_id, start_time, end_time, duration_minutes, notes FROM tracked_sessions WHERE user_id = %s ORDER BY start_time DESC",
-            (user_id,),
-        )
-        rows = cur.fetchall()
-        return [{"id": r[0], "task_id": r[1], "start_time": r[2], "end_time": r[3], "duration_minutes": r[4], "notes": r[5]} for r in rows]
-    finally:
-        cur.close()
-        conn.close()
+@app.delete("/sessions/{session_id}")
+def delete_session(session_id: str):
+    deleted = sessions.find_one_and_delete({"_id": ObjectId(session_id)})
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"message": "Session deleted"}

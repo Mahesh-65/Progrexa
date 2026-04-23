@@ -1,54 +1,35 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { apiPost } from "../api";
+import { Link, useNavigate } from "react-router-dom";
+import { api, request } from "../api";
 
-export default function LoginPage({ onLogin }) {
-  const navigate = useNavigate();
-  const [form, setForm] = useState({ email: "", password: "" });
-  const [loading, setLoading] = useState(false);
+export default function LoginPage({ setAuthed }) {
+  const nav = useNavigate();
+  const [identity, setIdentity] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const handleSubmit = async (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError("");
     try {
-      const user = await apiPost("auth", "/login", form);
-      onLogin(user);
-      navigate("/dashboard");
+      await request(`${api.auth}/auth/login`, { method: "POST", body: JSON.stringify({ identity, password }) });
+      localStorage.setItem("authed", "1");
+      setAuthed(true);
+      nav("/dashboard");
     } catch (err) {
-      setError(err.message || "Unable to login");
-    } finally {
-      setLoading(false);
+      setError(err.message);
     }
   };
 
   return (
-    <section className="mx-auto mt-10 max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900">
-      <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Login</h2>
-      <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Welcome back to your personal planner.</p>
-      <form className="mt-5 grid gap-3" onSubmit={handleSubmit}>
-        <input
-          className="rounded-xl border border-slate-300 bg-white p-3 text-slate-900 placeholder-slate-500 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-          placeholder="Email"
-          type="email"
-          value={form.email}
-          onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
-          required
-        />
-        <input
-          type="password"
-          className="rounded-xl border border-slate-300 bg-white p-3 text-slate-900 placeholder-slate-500 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-          placeholder="Password"
-          value={form.password}
-          onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
-          required
-        />
-        {error && <p className="rounded-lg bg-rose-100 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">{error}</p>}
-        <button className="rounded-xl bg-brand-500 py-3 font-medium text-white hover:bg-brand-600 disabled:opacity-60" disabled={loading}>
-          {loading ? "Signing In..." : "Sign In"}
-        </button>
+    <div className="flex min-h-screen items-center justify-center bg-slate-950 p-4 text-slate-200">
+      <form onSubmit={submit} className="w-full max-w-md space-y-3 rounded-2xl border border-slate-800 bg-slate-900 p-6">
+        <h2 className="text-2xl font-semibold text-white">Login</h2>
+        {error ? <p className="text-sm text-rose-400">{error}</p> : null}
+        <input className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" placeholder="Username or Email" value={identity} onChange={(e) => setIdentity(e.target.value)} required />
+        <input type="password" className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <button className="w-full rounded-lg bg-indigo-600 py-2 font-medium">Sign In</button>
+        <Link className="block text-sm text-indigo-300" to="/register">Create account</Link>
       </form>
-    </section>
+    </div>
   );
 }

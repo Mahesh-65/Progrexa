@@ -1,17 +1,44 @@
+import { useEffect, useState } from "react";
+import { api, request } from "../api";
+
 export default function TasksPage() {
+  const [title, setTitle] = useState("");
+  const [items, setItems] = useState([]);
+
+  const load = async () => {
+    const res = await request(`${api.task}/tasks/${api.userId}`);
+    setItems(res.data);
+  };
+  useEffect(() => {
+    load();
+  }, []);
+
+  const add = async (e) => {
+    e.preventDefault();
+    await request(`${api.task}/tasks`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: api.userId, title, status: "todo", priority: "high", tags: [] }),
+    });
+    setTitle("");
+    load();
+  };
+
   return (
-    <section>
-      <h2 className="text-3xl font-bold">Tasks</h2>
-      <div className="mt-6 card">
-        <div className="flex flex-wrap gap-3">
-          <input className="flex-1 rounded-xl border border-slate-700 bg-slate-950 p-3" placeholder="New task title" />
-          <button className="rounded-xl bg-brand-500 px-4 py-2 text-white">Add Task</button>
-        </div>
-        <ul className="mt-6 space-y-3">
-          <li className="rounded-xl border border-slate-700 p-3">Design weekly planner screen</li>
-          <li className="rounded-xl border border-slate-700 p-3">Review analytics report flow</li>
-          <li className="rounded-xl border border-slate-700 p-3">Prepare tomorrow meeting notes</li>
-        </ul>
+    <section className="space-y-4">
+      <h2 className="page-title">Tasks</h2>
+      <form onSubmit={add} className="card flex gap-2">
+        <input className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="New task" required />
+        <button className="rounded-lg bg-indigo-600 px-4">Add</button>
+      </form>
+      <div className="space-y-2">
+        {items.map((item) => (
+          <div key={item.id} className="card flex items-center justify-between">
+            <div>
+              <p className="font-medium text-white">{item.title}</p>
+              <p className="text-sm text-slate-400">{item.status}</p>
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );
